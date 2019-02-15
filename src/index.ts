@@ -169,17 +169,11 @@ app.post('/api/v1/send/', async (request, response) => {
 
 	await Promise.all(
 		devices.map(async (device) => {
-			console.log('-----------------')
-			console.log(device)
 			await webpush
 				// @ts-ignore
 				.sendNotification(device.subscription, payload)
 				.then(() => successCount++)
-				.catch((error) => {
-					console.log('Failed')
-					console.error(error) // @TODO: maybe disable - too heavy
-					failCount++
-				})
+				.catch(() => failCount++)
 		})
 	)
 
