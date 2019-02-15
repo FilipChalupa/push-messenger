@@ -4,7 +4,7 @@ import * as bodyParser from 'body-parser'
 import * as webpush from 'web-push'
 
 const mongoUri =
-	process.env.MONGOLAB_URI ||
+	process.env.MONGODB_URI ||
 	process.env.MONGOHQ_URL ||
 	'mongodb://localhost/push_messenger'
 
