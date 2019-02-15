@@ -156,10 +156,12 @@ app.post('/api/v1/send/', async (request, response) => {
 
 	const groups = await Group.find({ label: { $in: groupLabels } })
 
-	const users = await User.find({ groups: { $in: groups.map((g) => g._id) } })
+	const users = await User.find({
+		groups: { $in: groups.map((g) => g._id) },
+	})
 	const devices = await Device.find({
 		// @ts-ignore
-		_id: { $in: users.map((u) => u.devices) },
+		_id: { $in: users.map((u) => u.devices[0]) }, // @TODO: include all devices
 	})
 
 	let successCount = 0
