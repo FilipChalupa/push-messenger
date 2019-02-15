@@ -161,7 +161,7 @@ app.post('/api/v1/send/', async (request, response) => {
 	})
 	const devices = await Device.find({
 		// @ts-ignore
-		_id: { $in: users.map((u) => u.devices[0]) }, // @TODO: include all devices
+		_id: { $in: [].concat(...users.map((u) => u.devices)) },
 	})
 
 	let successCount = 0
