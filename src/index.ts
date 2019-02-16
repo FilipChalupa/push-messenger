@@ -33,15 +33,18 @@ const userSchema = new mongoose.Schema({
 		required: true,
 		auto: true,
 	},
-	devices: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Device' }],
-	groups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group' }],
+	subscriptions: [
+		{ type: mongoose.Schema.Types.ObjectId, ref: 'Subscription' },
+	],
+	topics: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Topic' }],
 })
 
-const deviceSchema = new mongoose.Schema({
-	subscription: Object,
+const subscriptionSchema = new mongoose.Schema({
+	platform: String,
+	data: Object,
 })
 
-const groupSchema = new mongoose.Schema({
+const topicsSchema = new mongoose.Schema({
 	label: {
 		type: String,
 		index: true,
@@ -50,8 +53,8 @@ const groupSchema = new mongoose.Schema({
 })
 
 const User = mongoose.model('User', userSchema)
-const Device = mongoose.model('Device', deviceSchema)
-const Group = mongoose.model('Group', groupSchema)
+const Subscription = mongoose.model('Subscription', subscriptionSchema)
+const Topics = mongoose.model('Topic', topicsSchema)
 
 app.get('/', (request, response) => {
 	response.send('Push messenger v1')
@@ -68,31 +71,36 @@ app.post('/api/v1/user/', async (request, response) => {
 	})
 })
 
-// Get devices
-app.post('/api/v1/user/:userId/devices/', (request, response) => {})
+// Get subscriptions
+app.post('/api/v1/user/:userId/subscriptions/', (request, response) => {
+	// @TODO
+	response.send({})
+})
 
-// Add device
-app.post('/api/v1/user/:userId/device/', async (request, response) => {
+// Add subscription
+app.post('/api/v1/user/:userId/subscription/', async (request, response) => {
 	const userId: string = request.params.userId
 	const user = await User.findOne({ id: new mongoose.Types.ObjectId(userId) })
 	if (!user) {
 		throw new Error('User not found')
 	}
-	const device = await new Device({ subscription: request.body }).save()
+	const platform = request.body.platform || ''
+	const data = request.body.data || {}
+	const subscription = await new Subscription({ platform, data }).save()
 	// @ts-ignore
-	await user.devices.push(device)
+	await user.subscriptions.push(subscription)
 	await user.save()
 
-	const deviceId = device._id
+	const subscriptionId = subscription._id
 
 	response.send({
-		deviceId,
-		message: `Device with id "${deviceId}" added to user "${userId}"`,
+		subscriptionId,
+		message: `Subscription with id "${subscriptionId}" added to user "${userId}"`,
 	})
 })
 
-// Get groups
-app.get('/api/v1/user/:userId/groups/', async (request, response) => {
+// Get topics
+app.get('/api/v1/user/:userId/topics/', async (request, response) => {
 	const userId: string = request.params.userId
 	const user = await User.findOne({ id: new mongoose.Types.ObjectId(userId) })
 	if (!user) {
@@ -100,53 +108,69 @@ app.get('/api/v1/user/:userId/groups/', async (request, response) => {
 	}
 
 	// @ts-ignore
-	const groups = await Group.find({ _id: { $in: user.groups } })
+	const topics = await Topics.find({ _id: { $in: user.topics } })
 	// @ts-ignore
-	const groupLabels: string[] = groups.map((group) => group.label)
+	const topicLabels: string[] = topics.map((topic) => topic.label)
 	response.send({
-		groupLabels,
-		message: `User "${userId}" is in groups "${groupLabels.join('", "')}"`,
+		topicLabels,
+		message: `User "${userId}" is in topics "${topicLabels.join('", "')}"`,
 	})
 })
 
-// Add groups
-app.post('/api/v1/user/:userId/groups/', async (request, response) => {
+// Join topics
+app.post('/api/v1/user/:userId/topics/', async (request, response) => {
 	const userId: string = request.params.userId
 	const user = await User.findOne({ id: new mongoose.Types.ObjectId(userId) })
 	if (!user) {
 		throw new Error('User not found')
 	}
-	const groupLabels: string[] = request.body
+	const topicLabels: string[] = request.body
 	await Promise.all(
-		groupLabels.map(async (groupLabel) => {
-			const group = await Group.findOne({ label: groupLabel }).then(
-				(g) => g || new Group({ label: groupLabel }).save()
+		topicLabels.map(async (topicLabel) => {
+			const topic = await Topics.findOne({ label: topicLabel }).then(
+				(g) => g || new Topics({ label: topicLabel }).save()
 			)
 			// @ts-ignore
-			await user.groups.push(group)
-			return group
+			await user.topics.push(topic)
+			return topic
 		})
 	)
 	await user.save()
 
 	response.send({
-		groupLabels,
-		message: `User "${userId}" added to groups "${groupLabels.join('", "')}"`,
+		topicLabels,
+		message: `User "${userId}" joined topics "${topicLabels.join('", "')}"`,
 	})
 })
 
-// Remove groups
-app.delete('/api/v1/user/:userId/groups/', (request, response) => {
-	const groupLabels: string[] = request.body
+// Leave topics
+app.delete('/api/v1/user/:userId/topics/', async (request, response) => {
+	const userId: string = request.params.userId
+	const user = await User.findOne({ id: new mongoose.Types.ObjectId(userId) })
+	if (!user) {
+		throw new Error('User not found')
+	}
+	const topicLabels: string[] = request.body
+	const topicToLeaveIds = (await Topics.find({
+		label: { $in: topicLabels },
+	})).map((topic) => topic._id)
+	// @ts-ignore
+	const remainingTopics = user.topics.filter(
+		(topicId: string) => topicToLeaveIds.indexOf(topicId) === -1
+	)
+	// @ts-ignore
+	user.topics = remainingTopics
+	await user.save()
 	response.send({
-		groupLabels,
-		message: '@TODO',
+		topicLabels,
+		message: `User "${userId}" left topics "${topicLabels.join('", "')}"`,
 	})
 })
 
-// Send to group
+// Send to topics
 app.post('/api/v1/send/', async (request, response) => {
-	const groupLabels: string[] = request.body.groupLabels
+	const topicLabels: string[] = request.body.topics
+	const forbiddenTopics: string[] = request.body.forbiddenTopics
 	const payload: string = request.body.payload
 	const email: string = request.body.email
 	const publicKey: string = request.body.publicKey
@@ -154,31 +178,31 @@ app.post('/api/v1/send/', async (request, response) => {
 
 	webpush.setVapidDetails(`mailto:${email}`, publicKey, privateKey)
 
-	const groups = await Group.find({ label: { $in: groupLabels } })
+	const topics = await Topics.find({ label: { $in: topicLabels } })
 
 	const users = await User.find({
-		groups: { $in: groups.map((g) => g._id) },
+		topics: { $in: topics.map((g) => g._id) },
 	})
-	const devices = await Device.find({
+	const subscriptions = await Subscription.find({
 		// @ts-ignore
-		_id: { $in: [].concat(...users.map((u) => u.devices)) },
+		_id: { $in: [].concat(...users.map((u) => u.subscriptions)) },
 	})
 
 	let successCount = 0
 	let failCount = 0
 
 	await Promise.all(
-		devices.map(async (device) => {
+		subscriptions.map(async (subscription) => {
 			await webpush
 				// @ts-ignore
-				.sendNotification(device.subscription, payload)
+				.sendNotification(subscription.data, payload)
 				.then(() => successCount++)
 				.catch(() => failCount++)
 		})
 	)
 
 	response.send({
-		message: `Sent ${successCount} messages to groups "${groupLabels.join(
+		message: `Sent ${successCount} messages to topics "${topicLabels.join(
 			'", "'
 		)}" successfully and ${failCount} failed`,
 	})
