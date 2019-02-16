@@ -17,6 +17,10 @@ app.use((request, response, next) => {
 		'Access-Control-Allow-Headers',
 		'Origin, X-Requested-With, Content-Type, Accept'
 	)
+	response.header(
+		'Access-Control-Allow-Methods',
+		'POST, GET, PUT, DELETE, OPTIONS'
+	)
 	next()
 })
 app.use(bodyParser.json())
@@ -119,6 +123,7 @@ app.get('/api/v1/user/:userId/topics/', async (request, response) => {
 
 // Join topics
 app.post('/api/v1/user/:userId/topics/', async (request, response) => {
+	// @TODO: don't join more than once
 	const userId: string = request.params.userId
 	const user = await User.findOne({ id: new mongoose.Types.ObjectId(userId) })
 	if (!user) {
@@ -153,10 +158,10 @@ app.delete('/api/v1/user/:userId/topics/', async (request, response) => {
 	const topicLabels: string[] = request.body
 	const topicToLeaveIds = (await Topics.find({
 		label: { $in: topicLabels },
-	})).map((topic) => topic._id)
+	})).map((topic) => topic._id.toString())
 	// @ts-ignore
 	const remainingTopics = user.topics.filter(
-		(topicId: string) => topicToLeaveIds.indexOf(topicId) === -1
+		(topicId: string) => topicToLeaveIds.indexOf(topicId.toString()) === -1
 	)
 	// @ts-ignore
 	user.topics = remainingTopics
